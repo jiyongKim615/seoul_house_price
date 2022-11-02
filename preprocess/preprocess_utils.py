@@ -3,6 +3,7 @@ import os
 import pandas as pd
 from pytimekr import pytimekr
 import warnings
+from tqdm import tqdm
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_rows', 500)
@@ -186,13 +187,73 @@ def drop_columns(df, drop_column_lst):
     return df
 
 
-def get_diff_one_month_house_price():
+def get_diff_one_month_house_price(df_copy):
     # 직전 한 달 같은 집에 대한 차이
-    return None
+    yrmonth_c_amt_df = df_copy.groupby(['COMPLEX_NAME', 'CONTRACT_YEAR_MONTH']).mean()['AMOUNT'].reset_index()
+
+    yrmonth_c_amt_df.rename(columns={'AMOUNT': 'MEAN_YEAR_MONTH_AMOUNT'}, inplace=True)
+
+    un_lst = yrmonth_c_amt_df['COMPLEX_NAME'].unique().tolist()
+
+    all_complex_lst = []
+    for complex_name in tqdm(un_lst, mininterval=0.01):
+        temp = yrmonth_c_amt_df[yrmonth_c_amt_df['COMPLEX_NAME'] == complex_name]
+        temp['COMPLEX_NAME_AMOUNT_SHIFT'] = temp['MEAN_YEAR_MONTH_AMOUNT'].shift(1)
+        diff_complex_amount = temp['MEAN_YEAR_MONTH_AMOUNT'] - temp['COMPLEX_NAME_AMOUNT_SHIFT']
+        temp['CHANGE_AMOUNT_COMPLEX'] = diff_complex_amount
+        all_complex_lst.append(temp)
+
+    final_df = pd.concat(all_complex_lst)
+    # CHANGE_AMOUNT_COMPLEX nan은 비교 대상의 데이터가 없으므로 0으로 처리할 것
+    final_df['CHANGE_AMOUNT_COMPLEX'] = final_df['CHANGE_AMOUNT_COMPLEX'].fillna(0)
+    merge_df = pd.merge(df_copy,
+                        final_df[['COMPLEX_NAME', 'CONTRACT_YEAR_MONTH', 'CHANGE_AMOUNT_COMPLEX']],
+                        on=['COMPLEX_NAME', 'CONTRACT_YEAR_MONTH'])
+    return merge_df
 
 
-def preprocess_fe_existing():
-    return None
+def filter_feature_lst(train_df):
+    train_feature_lst = ['AREA', 'FLOOR', 'GU_DONG_AMOUNT_MEAN',
+                         'GU_DONG_AMOUNT_MEDIAN',
+                         'GU_DONG_AMOUNT_SKEW',
+                         'GU_DONG_AMOUNT_MIN',
+                         'GU_DONG_AMOUNT_MAX',
+                         'GU_DONG_AMOUNT_MAD',
+                         'COMPLEX_NAME_AMOUNT_MEAN',
+                         'COMPLEX_NAME_AMOUNT_MEDIAN',
+                         'COMPLEX_NAME_AMOUNT_SKEW',
+                         'COMPLEX_NAME_AMOUNT_MIN',
+                         'COMPLEX_NAME_AMOUNT_MAX',
+                         'COMPLEX_NAME_AMOUNT_MAD',
+                         'DIFF_YEAR_CONSTRUCT_CONTRACT',
+                         'CHANGE_AMOUNT_COMPLEX']
+
+    train_df = train_df[train_feature_lst]
+    return train_df
+
+
+def preprocess_fe_existing(train_df):
+    ## 기존 특징 전처리
+    # CITY_DISTRICT 처리
+    train_df = get_city_district_target_stats(train_df)
+    # ADDRESS 처리, BUILD_1ST_NUM 처리, BUILD_2ND_NUM 처리 --> COMPLEX_NAME 처리
+    train_df = get_complex_name_target_stats(train_df, ['COMPLEX_NAME', 'ADDRESS'])
+    # AREA 처리 & FLOOR 처리 --> 연속형
+    # CONTRACT_YEAR_MONTH 처리, CONTRACT_DAY 처리 --> 합치고 년/월/일/주말/공휴일 변수로 바꿀 것
+    train_df = get_date_preprocess(train_df)
+    # CONSTRUCTION_YEAR 처리 --> 얼마나 오래되었는지 변수 생성 --> 원래 변수 삭제
+    train_df = get_diff_year_construct_contract(train_df)
+    # ROAD_NAME 처리 --> 주변 도로 조사 --> 공원으로 가는건지 아닌지 범주 변수 생성 --> 보류(일단 삭제)
+    # TERMINATION_DATE 처리 --> 삭제
+    # TRANSACTION_TYPE 처리 --> 삭제
+    # BROKER_LOCATION 처리 --> 삭제
+    train_df = drop_columns(train_df, ['ROAD_NAME', 'TERMINATION_DATE',
+                                       'TRANSACTION_TYPE', 'BROKER_LOCATION'])
+    # 같은 집값 한 달 전 데이터 비교
+    train_df = get_diff_one_month_house_price(train_df)
+
+    return train_df
+
 
 
 
