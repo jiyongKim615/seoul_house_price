@@ -4,6 +4,7 @@ import pandas as pd
 from pytimekr import pytimekr
 import warnings
 from tqdm import tqdm
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_rows', 500)
@@ -38,14 +39,30 @@ def get_missing_data_percentage(df):
     return missing_data
 
 
-def get_gen_ml_train_test_df():
+def get_gen_ml_train_test_df(num=80):
     df = get_raw_house_data()
     df = get_rename(df)
-    train_df = df.iloc[:206477, :]
-    test_df = df.iloc[206477:, :]
-    train_df = get_amount_int(train_df)
-    test_df = get_amount_int(test_df)
-    return train_df, test_df
+    test_df = df[df['CONTRACT_YEAR_MONTH'] == '202210']
+    df = df[df['CONTRACT_YEAR_MONTH'] != '202210']
+    complex_name_lst = df['COMPLEX_NAME'].unique().tolist()
+    temp_train_lst = []
+    temp_val_lst = []
+    for complex_name in tqdm(complex_name_lst, mininterval=0.01):
+        temp = df[df['COMPLEX_NAME'] == complex_name]
+        temp = temp.sort_values(by=['CONTRACT_YEAR_MONTH', 'CONTRACT_DAY'])
+        train_len = int(len(temp) * num / 100)
+        temp_train_df = temp.iloc[:train_len, :]
+        temp_val_df = temp.iloc[train_len:, :]
+
+        temp_train_df = get_amount_int(temp_train_df)
+        temp_val_df = get_amount_int(temp_val_df)
+
+        temp_train_lst.append(temp_train_df)
+        temp_val_lst.append(temp_val_df)
+
+    train_df = pd.concat(temp_train_lst)
+    val_df = pd.concat(temp_val_lst)
+    return train_df, val_df, test_df
 
 
 def get_rename(df):
@@ -233,6 +250,7 @@ def filter_feature_lst(train_df):
 
 
 def preprocess_fe_existing(train_df):
+    train_df.dropna(subset=['CONSTRUCTION_YEAR'], inplace=True)
     ## 기존 특징 전처리
     # CITY_DISTRICT 처리
     train_df = get_city_district_target_stats(train_df)
@@ -253,7 +271,3 @@ def preprocess_fe_existing(train_df):
     train_df = get_diff_one_month_house_price(train_df)
 
     return train_df
-
-
-
-
