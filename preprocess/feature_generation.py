@@ -2,10 +2,6 @@ import pandas as pd
 from tqdm import tqdm
 
 
-def get_nine_feature_gen_macro():
-    return None
-
-
 def get_region_key_value(region):
     if region == '종로구':
         return 101
@@ -59,6 +55,19 @@ def get_region_key_value(region):
         return 211
     else:
         return 300
+
+
+def preprocess_gu_feature(test_df):
+    region_lst = test_df['GU'].unique().tolist()
+    all_region_lst = []
+    for region_name in tqdm(region_lst, mininterval=0.01):
+        test = test_df[test_df['GU'] == region_name]
+        test = test.copy()
+        key_value_region = get_region_key_value(region_name)
+        test['REGION_CODE'] = key_value_region
+        all_region_lst.append(test)
+    all_test_df = pd.concat(all_region_lst)
+    return all_test_df
 
 
 def get_price_index_rate_df_float(sale_price_index_rate):

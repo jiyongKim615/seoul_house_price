@@ -42,8 +42,8 @@ def get_missing_data_percentage(df):
 def get_gen_ml_train_test_df(num=80):
     df = get_raw_house_data()
     df = get_rename(df)
-    test_df = df[df['CONTRACT_YEAR_MONTH'] == '202210']
-    df = df[df['CONTRACT_YEAR_MONTH'] != '202210']
+    test_df = df[df['CONTRACT_YEAR_MONTH'] == 202210]
+    df = df[df['CONTRACT_YEAR_MONTH'] != 202210]
     complex_name_lst = df['COMPLEX_NAME'].unique().tolist()
     temp_train_lst = []
     temp_val_lst = []
@@ -230,20 +230,42 @@ def get_diff_one_month_house_price(df_copy):
 
 
 def filter_feature_lst(train_df):
-    train_feature_lst = ['AREA', 'FLOOR', 'GU_DONG_AMOUNT_MEAN',
+    train_feature_lst = ['REGION_CODE', 'DATE_MONTH', 'AREA', 'FLOOR',
+                         'TRAIN_VAL', 'AMOUNT',
+                         'GU_DONG_AMOUNT_MEAN',
                          'GU_DONG_AMOUNT_MEDIAN',
                          'GU_DONG_AMOUNT_SKEW',
                          'GU_DONG_AMOUNT_MIN',
                          'GU_DONG_AMOUNT_MAX',
                          'GU_DONG_AMOUNT_MAD',
+                         'COMPLEX_NAME',
                          'COMPLEX_NAME_AMOUNT_MEAN',
                          'COMPLEX_NAME_AMOUNT_MEDIAN',
                          'COMPLEX_NAME_AMOUNT_SKEW',
                          'COMPLEX_NAME_AMOUNT_MIN',
                          'COMPLEX_NAME_AMOUNT_MAX',
-                         'COMPLEX_NAME_AMOUNT_MAD',
-                         'DIFF_YEAR_CONSTRUCT_CONTRACT',
-                         'CHANGE_AMOUNT_COMPLEX']
+                         'COMPLEX_NAME_AMOUNT_MAD']
+
+    train_df = train_df[train_feature_lst]
+    return train_df
+
+
+def filter_feature_lst_test(train_df):
+    train_feature_lst = ['REGION_CODE', 'DATE_MONTH', 'AREA', 'FLOOR',
+                         'AMOUNT',
+                         'GU_DONG_AMOUNT_MEAN',
+                         'GU_DONG_AMOUNT_MEDIAN',
+                         'GU_DONG_AMOUNT_SKEW',
+                         'GU_DONG_AMOUNT_MIN',
+                         'GU_DONG_AMOUNT_MAX',
+                         'GU_DONG_AMOUNT_MAD',
+                         'COMPLEX_NAME',
+                         'COMPLEX_NAME_AMOUNT_MEAN',
+                         'COMPLEX_NAME_AMOUNT_MEDIAN',
+                         'COMPLEX_NAME_AMOUNT_SKEW',
+                         'COMPLEX_NAME_AMOUNT_MIN',
+                         'COMPLEX_NAME_AMOUNT_MAX',
+                         'COMPLEX_NAME_AMOUNT_MAD']
 
     train_df = train_df[train_feature_lst]
     return train_df
@@ -269,5 +291,41 @@ def preprocess_fe_existing(train_df):
                                        'TRANSACTION_TYPE', 'BROKER_LOCATION'])
     # 같은 집값 한 달 전 데이터 비교
     train_df = get_diff_one_month_house_price(train_df)
-
+    train_df['DATE_MONTH'] = train_df['DATE'].dt.strftime('%Y-%m')
     return train_df
+
+
+def get_macro_eco_feature_utils():
+    us_ir_df = pd.read_csv('/Users/jiyongkim/Downloads/interest_rate.csv')
+    us_ir_df['DATE'] = pd.to_datetime(us_ir_df['DATE'])
+    korea_ir_df = pd.read_csv('/Users/jiyongkim/Downloads/korea_ir.csv')
+    korea_ir_df['DATE'] = pd.to_datetime(korea_ir_df['DATE'])
+    # composite leading indicators
+    cli_df = pd.read_csv('/Users/jiyongkim/Downloads/composite_leading_indicators.csv')
+    cli_df['TIME'] = pd.to_datetime(cli_df['TIME'])
+    # preprocess (미국, 한국, 주요 유럽국, 중국)
+    # Korea, OECD - Europe, China (People's Republic of), United States
+    temp_korea = cli_df[cli_df['Country'] == 'Korea']
+    temp_eu = cli_df[cli_df['Country'] == 'OECD - Europe']
+    temp_china = cli_df[cli_df['Country'] == "China (People's Republic of)"]
+    temp_usa = cli_df[cli_df['Country'] == 'United States']
+
+    temp_korea_filter = temp_korea[['TIME', 'Value']]
+    temp_eu_filter = temp_eu[['TIME', 'Value']]
+    temp_china_filter = temp_china[['TIME', 'Value']]
+    temp_usa_filter = temp_usa[['TIME', 'Value']]
+
+    return us_ir_df, korea_ir_df, temp_korea_filter, temp_eu_filter, temp_china_filter, temp_usa_filter
+
+
+def rename_macro_eco_features(temp_korea_filter, temp_eu_filter, temp_china_filter, temp_usa_filter):
+    temp_korea_filter.rename(columns={'TIME': 'DATE'}, inplace=True)
+    temp_korea_filter.rename(columns={'Value': 'KOR_VALUE'}, inplace=True)
+    temp_eu_filter.rename(columns={'TIME': 'DATE'}, inplace=True)
+    temp_eu_filter.rename(columns={'Value': 'EU_VALUE'}, inplace=True)
+    temp_china_filter.rename(columns={'TIME': 'DATE'}, inplace=True)
+    temp_china_filter.rename(columns={'Value': 'CN_VALUE'}, inplace=True)
+    temp_usa_filter.rename(columns={'TIME': 'DATE'}, inplace=True)
+    temp_usa_filter.rename(columns={'Value': 'USA_VALUE'}, inplace=True)
+
+    return temp_korea_filter, temp_eu_filter, temp_china_filter, temp_usa_filter
