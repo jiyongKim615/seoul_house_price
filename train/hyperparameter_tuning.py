@@ -1,14 +1,14 @@
-import numpy as np
 from optuna.integration import XGBoostPruningCallback
-from optuna.samplers import TPESampler
 from sklearn.metrics import mean_squared_error
 from xgboost import XGBRegressor
-from optuna import create_study
-import optuna
-import pandas as pd
-from tqdm import tqdm
 
+from train.train_data import *
+from pytorch_tabnet.tab_model import TabNetRegressor
+from sklearn.model_selection import KFold
+import torch
 from preprocess.preprocess_all_in_one import get_all_feature_gen_macro
+import optuna
+
 
 FS = (14, 6)  # figure size
 RS = 124  # random state
@@ -25,76 +25,82 @@ MULTIVARIATE = True
 # XGBoost
 EARLY_STOPPING_ROUNDS = 100
 
-all_common_feature = ['DATE',
-                      'SALE_RATE',
-                      'JEONSE_RATE',
-                      'UNDERVALUE_JEONSE',
-                      'AREA',
-                      'FLOOR',
-                      'GU_DONG_AMOUNT_MEAN',
-                      'GU_DONG_AMOUNT_MEDIAN',
-                      'GU_DONG_AMOUNT_SKEW',
-                      'GU_DONG_AMOUNT_MIN',
-                      'GU_DONG_AMOUNT_MAX',
-                      'GU_DONG_AMOUNT_MAD',
-                      'COMPLEX_NAME_AMOUNT_MEAN',
-                      'COMPLEX_NAME_AMOUNT_MEDIAN',
-                      'COMPLEX_NAME_AMOUNT_SKEW',
-                      'COMPLEX_NAME_AMOUNT_MIN',
-                      'COMPLEX_NAME_AMOUNT_MAX',
-                      'COMPLEX_NAME_AMOUNT_MAD',
-                      'COMPLEX_NAME',
-                      'REGION_CODE',
-                      'INCOME_PIR',
-                      'SALE_CONSUMER_FLAG',
-                      'FINAL_KHAI',
-                      'SALE_OVER_JEONSE',
-                      'SUPPLY_DEMAND',
-                      'HOUSE_OCCUPANCY',
-                      'HOUSE_UNSOLD',
-                      'KOR_VALUE',
-                      'EU_VALUE',
-                      'CN_VALUE',
-                      'USA_VALUE',
-                      'INTEREST_RATE',
-                      'KOREA_IR',
-                      'AMOUNT']
 
-feature_x = ['SALE_RATE',
-             'JEONSE_RATE',
-             'UNDERVALUE_JEONSE',
-             'AREA',
-             'FLOOR',
-             'GU_DONG_AMOUNT_MEAN',
-             'GU_DONG_AMOUNT_MEDIAN',
-             'GU_DONG_AMOUNT_SKEW',
-             'GU_DONG_AMOUNT_MIN',
-             'GU_DONG_AMOUNT_MAX',
-             'GU_DONG_AMOUNT_MAD',
-             'COMPLEX_NAME_AMOUNT_MEAN',
-             'COMPLEX_NAME_AMOUNT_MEDIAN',
-             'COMPLEX_NAME_AMOUNT_SKEW',
-             'COMPLEX_NAME_AMOUNT_MIN',
-             'COMPLEX_NAME_AMOUNT_MAX',
-             'COMPLEX_NAME_AMOUNT_MAD',
-             'COMPLEX_NAME',
-             'REGION_CODE',
-             'INCOME_PIR',
-             'SALE_CONSUMER_FLAG',
-             'FINAL_KHAI',
-             'SALE_OVER_JEONSE',
-             'SUPPLY_DEMAND',
-             'HOUSE_OCCUPANCY',
-             'HOUSE_UNSOLD',
-             'KOR_VALUE',
-             'EU_VALUE',
-             'CN_VALUE',
-             'USA_VALUE',
-             'INTEREST_RATE',
-             'KOREA_IR']
+def run_tabnet_with_hyperparameter_tuning(train_test_ratio=80, run_time=0.5):  # 0.5 --> 30분
+    train_df_new, test_df_new = redefine_train_df_test_df(num=train_test_ratio)
+    train_df_new, test_df_new = label_encoding(train_df_new, test_df_new)
+    # 아파트 가격 로그변환
+    train_df_target_log_transform = get_log_transform(train_df_new, 'AMOUNT')
+    train_df_target_log_transform = train_df_target_log_transform.reset_index(drop=True)
+    X_df = train_df_target_log_transform[feature_x]
+    y_df = train_df_target_log_transform[target]
+    X = X_df.values
+    y = y_df.values
+    y = y.reshape(-1, 1)
 
-target = 'AMOUNT'
+    def Objective(trial):
+        mask_type = trial.suggest_categorical("mask_type", ["entmax", "sparsemax"])
+        n_da = trial.suggest_int("n_da", 56, 64, step=4)
+        n_steps = trial.suggest_int("n_steps", 1, 3, step=1)
+        gamma = trial.suggest_float("gamma", 1., 1.4, step=0.2)
+        n_shared = trial.suggest_int("n_shared", 1, 3)
+        lambda_sparse = trial.suggest_float("lambda_sparse", 1e-6, 1e-3, log=True)
+        tabnet_params = dict(n_d=n_da, n_a=n_da, n_steps=n_steps, gamma=gamma,
+                             lambda_sparse=lambda_sparse, optimizer_fn=torch.optim.Adam,
+                             optimizer_params=dict(lr=2e-2, weight_decay=1e-5),
+                             mask_type=mask_type, n_shared=n_shared,
+                             scheduler_params=dict(mode="min",
+                                                   patience=trial.suggest_int("patienceScheduler", low=3, high=10),
+                                                   # changing sheduler patience to be lower than early stopping patience
+                                                   min_lr=1e-5,
+                                                   factor=0.5, ),
+                             scheduler_fn=torch.optim.lr_scheduler.ReduceLROnPlateau,
+                             verbose=0,
+                             )  # early stopping
+        kf = KFold(n_splits=5, random_state=42, shuffle=True)
+        CV_score_array = []
+        for train_index, test_index in kf.split(X):
+            X_train, X_valid = X[train_index], X[test_index]
+            y_train, y_valid = y[train_index], y[test_index]
+            regressor = TabNetRegressor(**tabnet_params)
+            regressor.fit(X_train=X_train, y_train=y_train,
+                          eval_set=[(X_valid, y_valid)],
+                          patience=trial.suggest_int("patience", low=15, high=30),
+                          max_epochs=trial.suggest_int('epochs', 1, 8000),
+                          eval_metric=['rmse'])
+            CV_score_array.append(regressor.best_cost)
+        avg = np.mean(CV_score_array)
+        return avg
 
+    study = optuna.create_study(direction="minimize", study_name='TabNet optimization')
+    study.optimize(Objective, timeout=run_time * 60)  # 5 hours
+
+    TabNet_params = study.best_params
+
+    final_params = dict(n_d=TabNet_params['n_da'], n_a=TabNet_params['n_da'], n_steps=TabNet_params['n_steps'],
+                        gamma=TabNet_params['gamma'],
+                        lambda_sparse=TabNet_params['lambda_sparse'], optimizer_fn=torch.optim.Adam,
+                        optimizer_params=dict(lr=2e-2, weight_decay=1e-5),
+                        mask_type=TabNet_params['mask_type'], n_shared=TabNet_params['n_shared'],
+                        scheduler_params=dict(mode="min",
+                                              patience=TabNet_params['patienceScheduler'],
+                                              min_lr=1e-5,
+                                              factor=0.5, ),
+                        scheduler_fn=torch.optim.lr_scheduler.ReduceLROnPlateau,
+                        verbose=0,
+                        )
+    epochs = TabNet_params['epochs']
+
+    regressor = TabNetRegressor(**final_params)
+    regressor.fit(X_train=X, y_train=y,
+                  patience=TabNet_params['patience'], max_epochs=epochs,
+                  eval_metric=['rmse'])
+
+    pred = regressor.predict(test_df_new[feature_x].values)
+    predictions = np.expm1(pred)
+
+    rmse = mean_squared_error(test_df_new['AMOUNT'].values, predictions, squared=False)
+    return rmse
 
 def run_xgboost_optuna(X_train, y_train, X_val, y_val):
     def objective(trial):
