@@ -27,20 +27,13 @@ EARLY_STOPPING_ROUNDS = 100
 
 
 def run_tabnet_with_hyperparameter_tuning(train_test_ratio=80, run_time=0.5):  # 0.5 --> 30분
-    train_df_new, test_df_new = redefine_train_df_test_df(num=train_test_ratio)
-    train_df_new, test_df_new = label_encoding(train_df_new, test_df_new)
-    # 아파트 가격 로그변환
-    train_df_target_log_transform = get_log_transform(train_df_new, 'AMOUNT')
-    train_df_target_log_transform = train_df_target_log_transform.reset_index(drop=True)
-    X_df = train_df_target_log_transform[feature_x]
-    y_df = train_df_target_log_transform[target]
-    X = X_df.values
-    y = y_df.values
-    y = y.reshape(-1, 1)
+    X_df, y_df, final_test = get_tabnet_final_df(train_test_ratio=train_test_ratio)
+    X = X_df.copy()
+    y = y_df.copy()
 
     def Objective(trial):
         mask_type = trial.suggest_categorical("mask_type", ["entmax", "sparsemax"])
-        n_da = trial.suggest_int("n_da", 56, 64, step=4)
+        n_da = trial.suggest_int("n_da", 8, 64, step=4)
         n_steps = trial.suggest_int("n_steps", 1, 3, step=1)
         gamma = trial.suggest_float("gamma", 1., 1.4, step=0.2)
         n_shared = trial.suggest_int("n_shared", 1, 3)
@@ -53,7 +46,7 @@ def run_tabnet_with_hyperparameter_tuning(train_test_ratio=80, run_time=0.5):  #
                                                    patience=trial.suggest_int("patienceScheduler", low=3, high=10),
                                                    # changing sheduler patience to be lower than early stopping patience
                                                    min_lr=1e-5,
-                                                   factor=0.5, ),
+                                                   factor=0.5),
                              scheduler_fn=torch.optim.lr_scheduler.ReduceLROnPlateau,
                              verbose=0,
                              )  # early stopping
@@ -66,7 +59,7 @@ def run_tabnet_with_hyperparameter_tuning(train_test_ratio=80, run_time=0.5):  #
             regressor.fit(X_train=X_train, y_train=y_train,
                           eval_set=[(X_valid, y_valid)],
                           patience=trial.suggest_int("patience", low=15, high=30),
-                          max_epochs=trial.suggest_int('epochs', 1, 8000),
+                          max_epochs=trial.suggest_int('epochs', 1000, 5000),
                           eval_metric=['rmse'])
             CV_score_array.append(regressor.best_cost)
         avg = np.mean(CV_score_array)
@@ -85,9 +78,9 @@ def run_tabnet_with_hyperparameter_tuning(train_test_ratio=80, run_time=0.5):  #
                         scheduler_params=dict(mode="min",
                                               patience=TabNet_params['patienceScheduler'],
                                               min_lr=1e-5,
-                                              factor=0.5, ),
+                                              factor=0.5),
                         scheduler_fn=torch.optim.lr_scheduler.ReduceLROnPlateau,
-                        verbose=0,
+                        verbose=1,
                         )
     epochs = TabNet_params['epochs']
 
@@ -96,11 +89,13 @@ def run_tabnet_with_hyperparameter_tuning(train_test_ratio=80, run_time=0.5):  #
                   patience=TabNet_params['patience'], max_epochs=epochs,
                   eval_metric=['rmse'])
 
-    pred = regressor.predict(test_df_new[feature_x].values)
-    predictions = np.expm1(pred)
+    X_test = final_test[feature_x].values
+    pred = regressor.predict(X_test)
+    y_pred = np.expm1(pred)
+    y_test = final_test['AMOUNT'].values
+    rmse = mean_squared_error(y_test, y_pred, squared=False)
+    return X_test, y_test, y_pred, rmse
 
-    rmse = mean_squared_error(test_df_new['AMOUNT'].values, predictions, squared=False)
-    return rmse
 
 def run_xgboost_optuna(X_train, y_train, X_val, y_val):
     def objective(trial):
@@ -124,7 +119,7 @@ def run_xgboost_optuna(X_train, y_train, X_val, y_val):
         model = XGBRegressor(**params)
         pruning_callback = XGBoostPruningCallback(trial, "validation_0-rmse")
 
-        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], early_stopping_rounds=100, verbose=False)
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], early_stopping_rounds=100, verbose=True)
 
         preds = model.predict(X_val)
 

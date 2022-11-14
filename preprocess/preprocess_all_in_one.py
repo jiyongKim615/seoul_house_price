@@ -38,6 +38,7 @@ def get_train_df():
     y_test.to_csv('label_df.csv')
     # 필터링된 최종 학습 데이터 및 변수
     all_train_df_filtered = filter_feature_lst(all_train_df)
+    all_train_df_filtered.reset_index(drop=True, inplace=True)
     all_train_df_filtered.to_csv('all_train_df.csv')
     test_df.to_csv('test_df.csv')
     return all_train_df_filtered, y_test, test_df

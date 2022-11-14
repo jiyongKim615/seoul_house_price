@@ -7,7 +7,10 @@ from scipy import stats
 from preprocess.preprocess_all_in_one import *
 from sklearn.preprocessing import LabelEncoder
 
+from preprocess.target_encoding import TargetEncode
+
 all_common_feature = ['DATE',
+                      'DONG',
                       'SALE_RATE',
                       'JEONSE_RATE',
                       'UNDERVALUE_JEONSE',
@@ -43,6 +46,7 @@ all_common_feature = ['DATE',
                       'AMOUNT']
 
 feature_x = ['SALE_RATE',
+             'DONG',
              'JEONSE_RATE',
              'UNDERVALUE_JEONSE',
              'AREA',
@@ -110,9 +114,7 @@ def redefine_train_df_test_df(num=70):
     final_df = final_df[all_common_feature]
     test_df = test_df[all_common_feature]
     all_df = pd.concat([final_df, test_df])
-    all_df = all_df.reset_index(drop=True)
-    # 아파트 가격 로그변환
-
+    all_df = create_feature_time(all_df, 'DATE')
     complx_lst = all_df.COMPLEX_NAME.unique().tolist()
 
     train_df, test_df = utils_redefine_train_test(all_df, complx_lst, num)
@@ -156,3 +158,36 @@ def label_encoding(train_df_new, test_df_new):
     train_df_new['COMPLEX_NAME'] = encoder.transform(train_df_new['COMPLEX_NAME'])
     test_df_new['COMPLEX_NAME'] = encoder.transform(test_df_new['COMPLEX_NAME'])
     return train_df_new, test_df_new
+
+
+def get_final_df(train_test_ratio=80):
+    train_df_new, test_df_new = redefine_train_df_test_df(num=train_test_ratio)
+    train_df_new, test_df_new = label_encoding(train_df_new, test_df_new)
+    # 아파트 가격 로그변환
+    train_df_target_log_transform = get_log_transform(train_df_new, 'AMOUNT')
+    train_df_target_log_transform = train_df_target_log_transform.reset_index(drop=True)
+    X_df = train_df_target_log_transform[feature_x]
+    y_df = train_df_target_log_transform[target]
+    return X_df, y_df, test_df_new
+
+
+def get_tabnet_final_df(train_test_ratio=80):
+    X_df, y_df, test_df_new = get_final_df(train_test_ratio=train_test_ratio)
+    # Target encoding 수행
+    # region_code
+    all_train_df = pd.concat([X_df, y_df], axis=1)
+
+    categories = ['REGION_CODE', 'DONG']
+    te = TargetEncode(categories=categories)
+    te.fit(all_train_df, all_train_df[target])
+    final_train = te.transform(all_train_df)
+    final_test = te.transform(test_df_new)
+    # ordinal-encode categorical columns
+    X = final_train[feature_x].copy()
+    X_test = final_test[feature_x].copy()
+    y = final_train[target].copy()
+    # change data into numpy type
+    X_numpy = final_train[feature_x].to_numpy()
+    y_numpy = y.copy().to_numpy().reshape(-1, 1)
+
+    return X_numpy, y_numpy, final_test

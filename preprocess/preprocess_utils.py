@@ -1,9 +1,11 @@
 from glob import glob
+import numpy as np
 import os
 import pandas as pd
 from pytimekr import pytimekr
 import warnings
 from tqdm import tqdm
+from sklearn.preprocessing import FunctionTransformer
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.set_option('mode.chained_assignment', None)
@@ -231,7 +233,8 @@ def get_diff_one_month_house_price(df_copy):
 
 def filter_feature_lst(train_df):
     train_feature_lst = ['REGION_CODE', 'DATE_MONTH', 'AREA', 'FLOOR',
-                         'TRAIN_VAL', 'AMOUNT',
+                         'TRAIN_VAL',
+                         'DONG',
                          'GU_DONG_AMOUNT_MEAN',
                          'GU_DONG_AMOUNT_MEDIAN',
                          'GU_DONG_AMOUNT_SKEW',
@@ -253,6 +256,7 @@ def filter_feature_lst(train_df):
 def filter_feature_lst_test(train_df):
     train_feature_lst = ['REGION_CODE', 'DATE_MONTH', 'AREA', 'FLOOR',
                          'AMOUNT',
+                         'DONG',
                          'GU_DONG_AMOUNT_MEAN',
                          'GU_DONG_AMOUNT_MEDIAN',
                          'GU_DONG_AMOUNT_SKEW',
@@ -329,3 +333,21 @@ def rename_macro_eco_features(temp_korea_filter, temp_eu_filter, temp_china_filt
     temp_usa_filter.rename(columns={'Value': 'USA_VALUE'}, inplace=True)
 
     return temp_korea_filter, temp_eu_filter, temp_china_filter, temp_usa_filter
+
+
+def sin_transformer(period):
+    return FunctionTransformer(lambda x: np.sin(x / period * 2 * np.pi))
+
+
+def cos_transformer(period):
+    return FunctionTransformer(lambda x: np.cos(x / period * 2 * np.pi))
+
+
+def create_feature_time(df, col):
+    df[col] = pd.to_datetime(df[col])
+    df["YEAR"] = df[col].dt.year
+    df["MONTH"] = df[col].dt.month
+    df['MONTH_SIN'] = np.sin(2 * np.pi * df["MONTH"] / 12)
+    df['MONTH_COS'] = np.cos(2 * np.pi * df["MONTH"] / 12)
+
+    return df
