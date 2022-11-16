@@ -46,24 +46,24 @@ all_common_feature = ['DATE',
                       'AMOUNT']
 
 feature_x = ['SALE_RATE',
-             'DONG',
+             # 'DONG',
              'JEONSE_RATE',
              'UNDERVALUE_JEONSE',
              'AREA',
-             'FLOOR',
+             # 'FLOOR',
              'GU_DONG_AMOUNT_MEAN',
              'GU_DONG_AMOUNT_MEDIAN',
              'GU_DONG_AMOUNT_SKEW',
              'GU_DONG_AMOUNT_MIN',
              'GU_DONG_AMOUNT_MAX',
              'GU_DONG_AMOUNT_MAD',
-             'COMPLEX_NAME_AMOUNT_MEAN',
-             'COMPLEX_NAME_AMOUNT_MEDIAN',
-             'COMPLEX_NAME_AMOUNT_SKEW',
-             'COMPLEX_NAME_AMOUNT_MIN',
-             'COMPLEX_NAME_AMOUNT_MAX',
-             'COMPLEX_NAME_AMOUNT_MAD',
-             'COMPLEX_NAME',
+            # 'COMPLEX_NAME_AMOUNT_MEAN',
+            # 'COMPLEX_NAME_AMOUNT_MEDIAN',
+            # 'COMPLEX_NAME_AMOUNT_SKEW',
+            # 'COMPLEX_NAME_AMOUNT_MIN',
+            # 'COMPLEX_NAME_AMOUNT_MAX',
+            # 'COMPLEX_NAME_AMOUNT_MAD',
+            # 'COMPLEX_NAME',
              'REGION_CODE',
              'INCOME_PIR',
              'SALE_CONSUMER_FLAG',
@@ -77,7 +77,11 @@ feature_x = ['SALE_RATE',
              'CN_VALUE',
              'USA_VALUE',
              'INTEREST_RATE',
-             'KOREA_IR']
+             'KOREA_IR',
+             'YEAR',
+             'MONTH',
+             'MONTH_SIN',
+             'MONTH_COS']
 
 target = 'AMOUNT'
 
@@ -177,7 +181,8 @@ def get_tabnet_final_df(train_test_ratio=80):
     # region_code
     all_train_df = pd.concat([X_df, y_df], axis=1)
 
-    categories = ['REGION_CODE', 'DONG']
+    # categories = ['REGION_CODE', 'DONG']
+    categories = ['REGION_CODE']
     te = TargetEncode(categories=categories)
     te.fit(all_train_df, all_train_df[target])
     final_train = te.transform(all_train_df)
