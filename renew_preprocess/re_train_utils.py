@@ -1,21 +1,36 @@
+from catboost import CatBoostRegressor
 from optuna.integration import XGBoostPruningCallback
 from sklearn.metrics import mean_squared_error
 from xgboost import XGBRegressor
+import lightgbm as lgb
 import numpy as np
 from pytorch_tabnet.tab_model import TabNetRegressor
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, train_test_split
 import torch
 import optuna
 
-feature_x1 = ['AREA', 'BUILD_1ST_NUM', 'FLOOR', 'ROAD_NAME', 'GU',
-              'DONG', 'DONG_CPX_NME', 'YEAR', 'MONTH', 'MONTH_SIN', 'MONTH_COS']
+
 target = 'AMOUNT'
 
-feature_x2 = []
-feature_x3 = []
+raw_lst = ['AREA', 'BUILD_1ST_NUM', 'FLOOR', 'ROAD_NAME', 'GU',
+           'DONG', 'DONG_CPX_NME', 'YEAR', 'MONTH', 'MONTH_SIN', 'MONTH_COS']
+
+group_fe_lst = ['GU_DONG_AMOUNT_MEAN', 'GU_DONG_AMOUNT_MEDIAN','GU_DONG_AMOUNT_SKEW',
+              'GU_DONG_AMOUNT_MIN', 'GU_DONG_AMOUNT_MAX', 'GU_DONG_AMOUNT_MAD']
+
+subway_fe_lst = ['SUBWAY_DIST']
+
+macro_eco_fe_lst = ['KOREA_IR', 'INTEREST_RATE', 'KOR_VALUE',
+                    'EU_VALUE', 'CN_VALUE','USA_VALUE']
+
+house_eco_fe_lst = ['INCOME_PIR', 'SALE_CONSUMER_FLAG', 'FINAL_KHAI',
+                    'SALE_OVER_JEONSE', 'SUPPLY_DEMAND', 'HOUSE_OCCUPANCY',
+                    'HOUSE_UNSOLD', 'SALE_RATE', 'JEONSE_RATE', 'UNDERVALUE_JEONSE']
+
+park_fe_lst = []
 
 
-def run_tabnet_optuna(X_df, y_df, final_test, run_time=0.5):  # 0.5 --> 30분
+def run_tabnet_optuna(X_df, y_df, X_test, y_test, run_time=0.5):  # 0.5 --> 30분
     X = X_df.copy()
     y = y_df.copy()
 
@@ -47,14 +62,15 @@ def run_tabnet_optuna(X_df, y_df, final_test, run_time=0.5):  # 0.5 --> 30분
             regressor.fit(X_train=X_train, y_train=y_train,
                           eval_set=[(X_valid, y_valid)],
                           patience=trial.suggest_int("patience", low=15, high=30),
-                          max_epochs=trial.suggest_int('epochs', 1000, 5000),
+                          max_epochs=trial.suggest_int('epochs', 100, 200),
                           eval_metric=['rmse'])
             CV_score_array.append(regressor.best_cost)
         avg = np.mean(CV_score_array)
         return avg
 
     study = optuna.create_study(direction="minimize", study_name='TabNet optimization')
-    study.optimize(Objective, timeout=run_time * 60)  # 5 hours
+    # study.optimize(Objective, timeout=run_time * 60)  # 5 hours
+    study.optimize(Objective, n_trials=10)  # 5 hours
 
     TabNet_params = study.best_params
 
@@ -77,9 +93,205 @@ def run_tabnet_optuna(X_df, y_df, final_test, run_time=0.5):  # 0.5 --> 30분
                   patience=TabNet_params['patience'], max_epochs=epochs,
                   eval_metric=['rmse'])
 
-    X_test = final_test[feature_x1].values
     pred = regressor.predict(X_test)
     y_pred = np.expm1(pred)
-    y_test = final_test['AMOUNT'].values
     rmse = mean_squared_error(y_test, y_pred, squared=False)
     return X_test, y_test, y_pred, rmse
+
+
+def run_xgboost_optuna(X_df, y_df, X_test, y_test):
+    X = X_df.copy()
+    y = y_df.copy()
+
+    def objective(trial):
+        param = {
+            'max_depth': trial.suggest_int('max_depth', 1, 10),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 1.0),
+            'n_estimators': trial.suggest_int('n_estimators', 50, 1000),
+            'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+            'gamma': trial.suggest_float('gamma', 0.01, 1.0),
+            'subsample': trial.suggest_float('subsample', 0.01, 1.0),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.01, 1.0),
+            'reg_alpha': trial.suggest_float('reg_alpha', 0.01, 1.0),
+            'reg_lambda': trial.suggest_float('reg_lambda', 0.01, 1.0),
+            'random_state': trial.suggest_int('random_state', 1, 1000)
+        }
+        model = XGBRegressor(**param)
+        model.fit(X_df, y_df)
+        y_pred = model.predict(X_test)
+        rmse_xgb = mean_squared_error(y_test, y_pred, squared=False)
+        return rmse_xgb
+
+    study = optuna.create_study(direction='minimize', study_name='regression')
+    study.optimize(objective, n_trials=10)
+
+    xgb_params = study.best_params
+    kf = KFold(n_splits=5, random_state=42, shuffle=True)
+
+    oof_preds = np.zeros((X.shape[0],))
+    preds = 0
+    model_fi = 0
+    mean_rmse = 0
+
+    for num, (train_id, valid_id) in enumerate(kf.split(X)):
+        X_train, X_valid = X.loc[train_id], X.loc[valid_id]
+        y_train, y_valid = y.loc[train_id], y.loc[valid_id]
+
+        model = XGBRegressor(**xgb_params)
+        model.fit(X_train, y_train,
+                  verbose=False,
+                  eval_set=[(X_train, y_train), (X_valid, y_valid)],
+                  eval_metric="rmse",
+                  early_stopping_rounds=250)
+
+        # Mean of the predictions
+        preds += model.predict(X_test) / 5  # Splits
+
+        # Mean of feature importance
+        model_fi += model.feature_importances_ / 5  # splits
+
+        # Out of Fold predictions
+        oof_preds[valid_id] = model.predict(X_valid)
+        fold_rmse = np.sqrt(mean_squared_error(y_valid, oof_preds[valid_id]))
+        print(f"Fold {num} | RMSE: {fold_rmse}")
+
+        mean_rmse += fold_rmse / 5
+
+    print(f"\nOverall RMSE: {mean_rmse}")
+
+    y_pred = preds.copy()
+    rmse_final = np.sqrt(mean_squared_error(y_test, y_pred))
+    return X_test, y_test, y_pred, rmse_final
+
+
+def run_lightgbm_optuna(X_df, y_df, X_test, y_test):
+    X = X_df.copy()
+    y = y_df.copy()
+
+    def objective(trial):
+        param = {
+            'objective': 'regression',
+            'verbose': -1,
+            'metric': 'rmse',
+            'max_depth': trial.suggest_int('max_depth', 3, 15),
+            'learning_rate': trial.suggest_loguniform("learning_rate", 1e-8, 1e-2),
+            'n_estimators': trial.suggest_int('n_estimators', 500, 3000),
+            'min_child_samples': trial.suggest_int('min_child_samples', 5, 100),
+            'subsample': trial.suggest_loguniform('subsample', 0.4, 1),
+        }
+
+        model = lgb.LGBMRegressor(**param)
+        model = model.fit(X_df, y_df)
+        y_pred = model.predict(X_test)
+        rmse_lgb = mean_squared_error(y_test, y_pred, squared=False)
+        return rmse_lgb
+
+    study = optuna.create_study(direction='minimize', study_name='regression')
+    study.optimize(objective, n_trials=10)
+
+    lgb_params = study.best_params
+    kf = KFold(n_splits=5, random_state=42, shuffle=True)
+
+    oof_preds = np.zeros((X.shape[0],))
+    preds = 0
+    model_fi = 0
+    mean_rmse = 0
+
+    for num, (train_id, valid_id) in enumerate(kf.split(X)):
+        X_train, X_valid = X.loc[train_id], X.loc[valid_id]
+        y_train, y_valid = y.loc[train_id], y.loc[valid_id]
+
+        model = lgb.LGBMRegressor(**lgb_params)
+        model.fit(X_train, y_train,
+                  verbose=False,
+                  eval_set=[(X_train, y_train), (X_valid, y_valid)],
+                  eval_metric="rmse",
+                  early_stopping_rounds=250)
+
+        # Mean of the predictions
+        preds += model.predict(X_test) / 5  # Splits
+
+        # Mean of feature importance
+        model_fi += model.feature_importances_ / 5  # splits
+
+        # Out of Fold predictions
+        oof_preds[valid_id] = model.predict(X_valid)
+        fold_rmse = np.sqrt(mean_squared_error(y_valid, oof_preds[valid_id]))
+        print(f"Fold {num} | RMSE: {fold_rmse}")
+
+        mean_rmse += fold_rmse / 5
+
+    print(f"\nOverall RMSE: {mean_rmse}")
+
+    y_pred = preds.copy()
+    rmse_final = np.sqrt(mean_squared_error(y_test, y_pred))
+    return X_test, y_test, y_pred, rmse_final
+
+
+def run_catboost_optuna(X_df, y_df, X_test, y_test):
+    X = X_df.copy()
+    y = y_df.copy()
+
+    def objective(trial):
+        train_x, test_x, train_y, test_y = train_test_split(X, y, test_size=0.2, random_state=42)
+        param = {
+            'loss_function': 'RMSE',
+            'l2_leaf_reg': trial.suggest_loguniform('l2_leaf_reg', 1e-3, 10.0),
+            'max_bin': trial.suggest_int('max_bin', 200, 400),
+            # 'rsm': trial.suggest_uniform('rsm', 0.3, 1.0),
+            'subsample': trial.suggest_uniform('bagging_fraction', 0.4, 1.0),
+            'learning_rate': trial.suggest_uniform('learning_rate', 0.006, 0.018),
+            'n_estimators': trial.suggest_int('n_estimators', 500, 3000),
+            'max_depth': trial.suggest_categorical('max_depth', [5, 7, 9, 11, 13, 15]),
+            'random_state': trial.suggest_categorical('random_state', [2020]),
+            'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 300),
+        }
+        model = CatBoostRegressor(**param)
+
+        model.fit(train_x, train_y, eval_set=[(test_x, test_y)], early_stopping_rounds=200, verbose=False)
+
+        preds = model.predict(test_x)
+
+        rmse = mean_squared_error(test_y, preds, squared=False)
+
+        return rmse
+
+    study = optuna.create_study(direction='minimize', study_name='regression')
+    study.optimize(objective, n_trials=10)
+
+    cat_params = study.best_params
+    kf = KFold(n_splits=5, random_state=42, shuffle=True)
+
+    oof_preds = np.zeros((X.shape[0],))
+    preds = 0
+    model_fi = 0
+    mean_rmse = 0
+
+    for num, (train_id, valid_id) in enumerate(kf.split(X)):
+        X_train, X_valid = X.loc[train_id], X.loc[valid_id]
+        y_train, y_valid = y.loc[train_id], y.loc[valid_id]
+
+        model = lgb.LGBMRegressor(**cat_params)
+        model.fit(X_train, y_train,
+                  verbose=False,
+                  eval_set=[(X_train, y_train), (X_valid, y_valid)],
+                  eval_metric="rmse",
+                  early_stopping_rounds=250)
+
+        # Mean of the predictions
+        preds += model.predict(X_test) / 5  # Splits
+
+        # Mean of feature importance
+        model_fi += model.feature_importances_ / 5  # splits
+
+        # Out of Fold predictions
+        oof_preds[valid_id] = model.predict(X_valid)
+        fold_rmse = np.sqrt(mean_squared_error(y_valid, oof_preds[valid_id]))
+        print(f"Fold {num} | RMSE: {fold_rmse}")
+
+        mean_rmse += fold_rmse / 5
+
+    print(f"\nOverall RMSE: {mean_rmse}")
+    y_pred = preds.copy()
+    rmse_final = np.sqrt(mean_squared_error(y_test, y_pred))
+    return X_test, y_test, y_pred, rmse_final
