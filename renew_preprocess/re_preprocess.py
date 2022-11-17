@@ -28,13 +28,16 @@ def get_raw_preprocess_df():
 
 
 ### categories를 파라미터로 설정할 것
-def get_train_test_preprocess_df(df_copy, categories=['DONG_CPX_NME', 'GU', 'DONG', 'ROAD_NAME'],
+def get_train_test_preprocess_df(df_copy, final_features=raw_lst,
+                                 categories=['DONG_CPX_NME', 'GU', 'DONG', 'ROAD_NAME'],
                                  subway_dist_fe=True,
-                                 groupby_fee_add=True, macro_eco_fe=True, house_eco=True, park_fe=True, fe_norm=True,
+                                 groupby_fee_add=True, macro_eco_fe=True,
+                                 house_eco=True, park_fe=True, fe_norm=True,
                                  method='minmax', time_split=False):
     """
     :param feature_select: 'raw', 'group_fe', 'macro_economics'
     """
+
     # standard, minmax, robust
     # 학습 데이터와 테스트 데이터 나누기 (테스트 데이터는 처음보는 데이터 개념 --> 가장 최근 데이터)
     if macro_eco_fe:
@@ -48,7 +51,7 @@ def get_train_test_preprocess_df(df_copy, categories=['DONG_CPX_NME', 'GU', 'DON
         df_copy = get_merge_house_eco_fe(df_copy)
 
     if park_fe:
-        df_copy = get_park_df_utils(df_copy)
+        df_copy = get_park_flag_fe(df_copy)
 
     train_df, test_df = get_train_test_df(df_copy)
 
@@ -62,15 +65,10 @@ def get_train_test_preprocess_df(df_copy, categories=['DONG_CPX_NME', 'GU', 'DON
     final_train = te.transform(train_df)
     final_test = te.transform(test_df)
 
-    '''
-    if feature_select == 'raw':
-        final_feature_x = feature_x1
-    elif feature_select == 'group_fe':
-        final_feature_x = feature_x2
-    else:
-        final_feature_x = feature_x3
-    '''
-    final_feature_x = feature_x1
+    final_train.dropna(inplace=True)
+    final_test.dropna(inplace=True)
+
+    final_feature_x = final_features.copy()
     if fe_norm:
         scaler = get_scaling_method(method)
 

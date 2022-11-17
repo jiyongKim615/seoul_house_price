@@ -9,10 +9,28 @@ from renew_preprocess.re_house_eco_fe_utils import *
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import RobustScaler
 from sklearn.preprocessing import MaxAbsScaler
+
 # scaling metric: https://www.kaggle.com/code/pythonafroz/standardization-normalization-techniques
 
 file_path = '/Users/jiyongkim/Downloads/seoul_price_data/'
 file_name_os = os.listdir(file_path)
+
+raw_lst = ['AREA', 'BUILD_1ST_NUM', 'FLOOR', 'ROAD_NAME', 'GU',
+           'DONG', 'DONG_CPX_NME', 'YEAR', 'MONTH', 'MONTH_SIN', 'MONTH_COS']
+
+group_fe_lst = ['GU_DONG_AMOUNT_MEAN', 'GU_DONG_AMOUNT_MEDIAN', 'GU_DONG_AMOUNT_SKEW',
+                'GU_DONG_AMOUNT_MIN', 'GU_DONG_AMOUNT_MAX', 'GU_DONG_AMOUNT_MAD']
+
+subway_fe_lst = ['SUBWAY_DIST']
+
+macro_eco_fe_lst = ['KOREA_IR', 'INTEREST_RATE', 'KOR_VALUE',
+                    'EU_VALUE', 'CN_VALUE', 'USA_VALUE']
+
+house_eco_fe_lst = ['INCOME_PIR', 'SALE_CONSUMER_FLAG', 'FINAL_KHAI',
+                    'SALE_OVER_JEONSE', 'SUPPLY_DEMAND', 'HOUSE_OCCUPANCY',
+                    'HOUSE_UNSOLD', 'SALE_RATE', 'JEONSE_RATE', 'UNDERVALUE_JEONSE']
+
+park_fe_lst = ['PARK_FLAG']
 
 
 def get_raw_house_data():
@@ -309,6 +327,18 @@ def get_park_df_utils(df_copy):
     park_seoul_df_filter = park_seoul_df[['GU', 'DONG', 'PARK_NAME']]
     merge_df = pd.merge(df_copy, park_seoul_df_filter, on=['GU', 'DONG'], how='left')
     return merge_df
+
+
+def get_park_flag_fe(df_copy):
+    df_copy_new = get_park_df_utils(df_copy)
+    park_true_index_lst = df_copy_new[df_copy_new['PARK_NAME'].isna()].index.tolist()
+    df_copy_new['PARK_FLAG'] = 0
+
+    for i in tqdm(park_true_index_lst):
+        df_copy_new.iloc[i, -1] = 1
+
+    df_copy_new.drop(columns='PARK_NAME', inplace=True)
+    return df_copy_new
 
 
 def get_scaling_method(method):

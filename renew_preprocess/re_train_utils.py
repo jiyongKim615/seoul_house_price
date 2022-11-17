@@ -12,25 +12,8 @@ import optuna
 
 target = 'AMOUNT'
 
-raw_lst = ['AREA', 'BUILD_1ST_NUM', 'FLOOR', 'ROAD_NAME', 'GU',
-           'DONG', 'DONG_CPX_NME', 'YEAR', 'MONTH', 'MONTH_SIN', 'MONTH_COS']
 
-group_fe_lst = ['GU_DONG_AMOUNT_MEAN', 'GU_DONG_AMOUNT_MEDIAN','GU_DONG_AMOUNT_SKEW',
-              'GU_DONG_AMOUNT_MIN', 'GU_DONG_AMOUNT_MAX', 'GU_DONG_AMOUNT_MAD']
-
-subway_fe_lst = ['SUBWAY_DIST']
-
-macro_eco_fe_lst = ['KOREA_IR', 'INTEREST_RATE', 'KOR_VALUE',
-                    'EU_VALUE', 'CN_VALUE','USA_VALUE']
-
-house_eco_fe_lst = ['INCOME_PIR', 'SALE_CONSUMER_FLAG', 'FINAL_KHAI',
-                    'SALE_OVER_JEONSE', 'SUPPLY_DEMAND', 'HOUSE_OCCUPANCY',
-                    'HOUSE_UNSOLD', 'SALE_RATE', 'JEONSE_RATE', 'UNDERVALUE_JEONSE']
-
-park_fe_lst = []
-
-
-def run_tabnet_optuna(X_df, y_df, X_test, y_test, run_time=0.5):  # 0.5 --> 30분
+def run_tabnet_optuna(X_df, y_df, X_test, y_test):  # 0.5 --> 30분
     X = X_df.copy()
     y = y_df.copy()
 
@@ -134,8 +117,8 @@ def run_xgboost_optuna(X_df, y_df, X_test, y_test):
     mean_rmse = 0
 
     for num, (train_id, valid_id) in enumerate(kf.split(X)):
-        X_train, X_valid = X.loc[train_id], X.loc[valid_id]
-        y_train, y_valid = y.loc[train_id], y.loc[valid_id]
+        X_train, X_valid = X[train_id], X[valid_id]
+        y_train, y_valid = y[train_id], y[valid_id]
 
         model = XGBRegressor(**xgb_params)
         model.fit(X_train, y_train,
@@ -160,6 +143,7 @@ def run_xgboost_optuna(X_df, y_df, X_test, y_test):
     print(f"\nOverall RMSE: {mean_rmse}")
 
     y_pred = preds.copy()
+    y_pred = np.expm1(y_pred)
     rmse_final = np.sqrt(mean_squared_error(y_test, y_pred))
     return X_test, y_test, y_pred, rmse_final
 
@@ -198,8 +182,8 @@ def run_lightgbm_optuna(X_df, y_df, X_test, y_test):
     mean_rmse = 0
 
     for num, (train_id, valid_id) in enumerate(kf.split(X)):
-        X_train, X_valid = X.loc[train_id], X.loc[valid_id]
-        y_train, y_valid = y.loc[train_id], y.loc[valid_id]
+        X_train, X_valid = X[train_id], X[valid_id]
+        y_train, y_valid = y[train_id], y[valid_id]
 
         model = lgb.LGBMRegressor(**lgb_params)
         model.fit(X_train, y_train,
@@ -224,6 +208,7 @@ def run_lightgbm_optuna(X_df, y_df, X_test, y_test):
     print(f"\nOverall RMSE: {mean_rmse}")
 
     y_pred = preds.copy()
+    y_pred = np.expm1(y_pred)
     rmse_final = np.sqrt(mean_squared_error(y_test, y_pred))
     return X_test, y_test, y_pred, rmse_final
 
@@ -268,14 +253,13 @@ def run_catboost_optuna(X_df, y_df, X_test, y_test):
     mean_rmse = 0
 
     for num, (train_id, valid_id) in enumerate(kf.split(X)):
-        X_train, X_valid = X.loc[train_id], X.loc[valid_id]
-        y_train, y_valid = y.loc[train_id], y.loc[valid_id]
+        X_train, X_valid = X[train_id], X[valid_id]
+        y_train, y_valid = y[train_id], y[valid_id]
 
-        model = lgb.LGBMRegressor(**cat_params)
+        model = CatBoostRegressor(**cat_params, eval_metric='RMSE')
         model.fit(X_train, y_train,
                   verbose=False,
                   eval_set=[(X_train, y_train), (X_valid, y_valid)],
-                  eval_metric="rmse",
                   early_stopping_rounds=250)
 
         # Mean of the predictions
@@ -293,5 +277,6 @@ def run_catboost_optuna(X_df, y_df, X_test, y_test):
 
     print(f"\nOverall RMSE: {mean_rmse}")
     y_pred = preds.copy()
+    y_pred = np.expm1(y_pred)
     rmse_final = np.sqrt(mean_squared_error(y_test, y_pred))
     return X_test, y_test, y_pred, rmse_final
