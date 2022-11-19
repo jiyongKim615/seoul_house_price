@@ -77,9 +77,11 @@ def run_tabnet_optuna(X_df, y_df, X_test, y_test):  # 0.5 --> 30분
                   eval_metric=['rmse'])
 
     pred = regressor.predict(X_test)
-    y_pred = np.expm1(pred)
-    rmse = mean_squared_error(y_test, y_pred, squared=False)
-    return X_test, y_test, y_pred, rmse
+    exp_y_pred = np.expm1(pred)
+    exp_y_test = np.expm1(y_test)
+    rmse_non = mean_squared_error(y_test, pred, squared=False)
+    rmse_exp = mean_squared_error(exp_y_test, exp_y_pred, squared=False)
+    return X_test, y_test, pred, rmse_non, rmse_exp
 
 
 def run_xgboost_optuna(X_df, y_df, X_test, y_test):
@@ -142,10 +144,11 @@ def run_xgboost_optuna(X_df, y_df, X_test, y_test):
 
     print(f"\nOverall RMSE: {mean_rmse}")
 
-    y_pred = preds.copy()
-    y_pred = np.expm1(y_pred)
-    rmse_final = np.sqrt(mean_squared_error(y_test, y_pred))
-    return X_test, y_test, y_pred, rmse_final
+    exp_y_pred = np.expm1(preds)
+    exp_y_test = np.expm1(y_test)
+    rmse_non = mean_squared_error(y_test, preds, squared=False)
+    rmse_exp = mean_squared_error(exp_y_test, exp_y_pred, squared=False)
+    return X_test, y_test, preds, rmse_non, rmse_exp
 
 
 def run_lightgbm_optuna(X_df, y_df, X_test, y_test):
@@ -207,10 +210,11 @@ def run_lightgbm_optuna(X_df, y_df, X_test, y_test):
 
     print(f"\nOverall RMSE: {mean_rmse}")
 
-    y_pred = preds.copy()
-    y_pred = np.expm1(y_pred)
-    rmse_final = np.sqrt(mean_squared_error(y_test, y_pred))
-    return X_test, y_test, y_pred, rmse_final
+    exp_y_pred = np.expm1(preds)
+    exp_y_test = np.expm1(y_test)
+    rmse_non = mean_squared_error(y_test, preds, squared=False)
+    rmse_exp = mean_squared_error(exp_y_test, exp_y_pred, squared=False)
+    return X_test, y_test, preds, rmse_non, rmse_exp
 
 
 def run_catboost_optuna(X_df, y_df, X_test, y_test):
@@ -276,7 +280,8 @@ def run_catboost_optuna(X_df, y_df, X_test, y_test):
         mean_rmse += fold_rmse / 5
 
     print(f"\nOverall RMSE: {mean_rmse}")
-    y_pred = preds.copy()
-    y_pred = np.expm1(y_pred)
-    rmse_final = np.sqrt(mean_squared_error(y_test, y_pred))
-    return X_test, y_test, y_pred, rmse_final
+    exp_y_pred = np.expm1(preds)
+    exp_y_test = np.expm1(y_test)
+    rmse_non = mean_squared_error(y_test, preds, squared=False)
+    rmse_exp = mean_squared_error(exp_y_test, exp_y_pred, squared=False)
+    return X_test, y_test, preds, rmse_non, rmse_exp
