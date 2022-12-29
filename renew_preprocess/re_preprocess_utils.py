@@ -12,7 +12,8 @@ from sklearn.preprocessing import MaxAbsScaler
 
 # scaling metric: https://www.kaggle.com/code/pythonafroz/standardization-normalization-techniques
 
-file_path = '/Users/jiyongkim/Downloads/seoul_price_data/'
+# file_path = '/Users/jiyongkim/Downloads/seoul_price_data/'
+file_path = '/content/drive/MyDrive/Colab Notebooks/seoul_price/seoul_price_data/'
 file_name_os = os.listdir(file_path)
 
 raw_lst = ['AREA', 'BUILD_1ST_NUM', 'FLOOR', 'ROAD_NAME', 'GU',
@@ -227,12 +228,14 @@ def get_subway_dist(add_df):
 
 
 def get_macro_eco_feature_utils():
-    us_ir_df = pd.read_csv('/Users/jiyongkim/Downloads/interest_rate.csv')
+    # needed_file_path = '/Users/jiyongkim/Downloads/'
+    needed_file_path = '/content/drive/MyDrive/Colab Notebooks/seoul_price/raw_data/'
+    us_ir_df = pd.read_csv(needed_file_path + 'interest_rate.csv')
     us_ir_df['DATE_NEW'] = pd.to_datetime(us_ir_df['DATE']).dt.strftime('%Y-%m')
-    korea_ir_df = pd.read_csv('/Users/jiyongkim/Downloads/korea_ir.csv')
+    korea_ir_df = pd.read_csv(needed_file_path + 'korea_ir.csv')
     korea_ir_df['DATE_NEW'] = pd.to_datetime(korea_ir_df['DATE']).dt.strftime('%Y-%m')
     # composite leading indicators
-    cli_df = pd.read_csv('/Users/jiyongkim/Downloads/composite_leading_indicators.csv')
+    cli_df = pd.read_csv(needed_file_path + 'composite_leading_indicators.csv')
     cli_df['TIME'] = pd.to_datetime(cli_df['TIME'])
     cli_df['DATE_NEW'] = pd.to_datetime(cli_df['TIME']).dt.strftime('%Y-%m')
     # preprocess (미국, 한국, 주요 유럽국, 중국)

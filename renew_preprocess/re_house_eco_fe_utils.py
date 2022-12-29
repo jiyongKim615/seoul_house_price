@@ -1,6 +1,8 @@
 import pandas as pd
 from tqdm import tqdm
 
+needed_file_path = '/content/drive/MyDrive/Colab Notebooks/seoul_price/raw_data/'
+
 
 def get_region_key_value(region):
     if region == '종로구':
@@ -423,7 +425,7 @@ def get_price_index_rate_df_float(sale_price_index_rate):
 
 
 def get_sale_price_cum_sum_index():
-    sale_price_index_rate = pd.read_csv('/Users/jiyongkim/Downloads/monthly_sale_price_index.csv', encoding='UTF8')
+    sale_price_index_rate = pd.read_csv(needed_file_path + 'monthly_sale_price_index.csv', encoding='UTF8')
     all_region_price_index_rate_df = \
         get_price_index_rate_df_float(sale_price_index_rate)
     seoul_df = all_region_price_index_rate_df[all_region_price_index_rate_df['지역명'] != 300]
@@ -445,7 +447,7 @@ def get_sale_price_cum_sum_index():
 
 
 def get_jeonse_price_cum_sum_index_df():
-    jeonse_sale_price_index_rate = pd.read_csv('/Users/jiyongkim/Downloads/jeonse_sale_price_index.csv',
+    jeonse_sale_price_index_rate = pd.read_csv(needed_file_path + 'jeonse_sale_price_index.csv',
                                                encoding='UTF8')
     all_region_price_index_rate_df = \
         get_price_index_rate_df_float(jeonse_sale_price_index_rate)
@@ -484,7 +486,7 @@ def get_final_jeonse_price_index_df():
 
 def get_mean_sale_df():
     # 평균 매매 가격 데이터 불러오기
-    mean_sale_df = pd.read_csv('/Users/jiyongkim/Downloads/mean_sale_price_df.csv', encoding='UTF-8')
+    mean_sale_df = pd.read_csv(needed_file_path + 'mean_sale_price_df.csv', encoding='UTF-8')
     t_mean_sale_df = mean_sale_df.transpose().reset_index()
     t_mean_sale_df = t_mean_sale_df.iloc[:, [0, 3, 4]]
     t_mean_sale_df.rename(columns={2: 'GANGBUK'}, inplace=True)
@@ -526,7 +528,7 @@ def get_mean_income_df():
 
 def get_median_sale_df():
     # 중위 매매 가격 데이터 불러오기
-    median_sale_df = pd.read_csv('/Users/jiyongkim/Downloads/median_sale_price_df.csv', encoding='UTF-8')
+    median_sale_df = pd.read_csv(needed_file_path + 'median_sale_price_df.csv', encoding='UTF-8')
     t_median_sale_df = median_sale_df.transpose().reset_index()
     t_median_sale_df = t_median_sale_df.iloc[:, [0, 3, 4]]
     t_median_sale_df.rename(columns={2: 'GANGBUK'}, inplace=True)
@@ -543,7 +545,7 @@ def get_median_sale_df():
 def get_median_income_df():
     # 중위 가처분 소득 데이터 불러오기
     median_income = \
-        pd.read_csv('/Users/jiyongkim/Downloads/median_income.csv', encoding='UTF-8')
+        pd.read_csv(needed_file_path + 'median_income.csv', encoding='UTF-8')
     t_median_income_df = median_income.transpose().reset_index()
     # 4인 가구를 기준으로 할 것
     t_median_income_final_df = t_median_income_df.iloc[4:9, [2, 6]]
@@ -590,7 +592,7 @@ def get_final_pir_index_df():
 
 
 def get_final_khai_df():
-    khai_df = pd.read_csv('/Users/jiyongkim/Downloads/k_hai.csv', encoding='UTF8')
+    khai_df = pd.read_csv(needed_file_path + 'k_hai.csv', encoding='UTF8')
     t_khai_df = khai_df.transpose().reset_index()
     t_khai_df.rename(columns={0: 'GANGBUK_KHAI'}, inplace=True)
     t_khai_df.rename(columns={1: 'GANGNAM_KHAI'}, inplace=True)
@@ -603,7 +605,7 @@ def get_final_khai_df():
 
 def preprocess_sale_over_jeonse_df():
     # 전세가율이란 전세가격 비율의 줄임말로 전세가격을 매매가격으로 나눈 것이다.
-    sale_over_jeonse_df = pd.read_csv('/Users/jiyongkim/Downloads/sale_over_jeonse.csv',
+    sale_over_jeonse_df = pd.read_csv(needed_file_path + 'sale_over_jeonse.csv',
                                       encoding='UTF8')
     sale_over_jeonse_df = sale_over_jeonse_df[:33]
     region_lst = sale_over_jeonse_df['지역명'].unique().tolist()
@@ -641,7 +643,7 @@ def get_sale_over_jeonse_df():
 
 def get_consumer_price_index():
     concat_index_cumsum_final = get_final_jeonse_price_index_df()
-    consumer_price_index_df = pd.read_csv('/Users/jiyongkim/Downloads/consumer_price_index_df.csv', encoding='UTF8')
+    consumer_price_index_df = pd.read_csv(needed_file_path + 'consumer_price_index_df.csv', encoding='UTF8')
     consumer_price_index_df = consumer_price_index_df.dropna()
     consumer_price_index_df['DATE_NEW'] = consumer_price_index_df['DATE']
     final_consumer_price_df = pd.merge(consumer_price_index_df, concat_index_cumsum_final, on=['DATE_NEW'])
@@ -662,7 +664,7 @@ def get_supply_demand_index():
     동북권 : 성동, 광진, 동대문, 중랑, 성북, 강북, 도봉, 노원
     서북권 : 은평, 서대문, 마포
     """
-    supply_demand_index = pd.read_csv('/Users/jiyongkim/Downloads/supply_demand_index.csv',
+    supply_demand_index = pd.read_csv(needed_file_path + 'supply_demand_index.csv',
                                       encoding='cp949')
     t_supply_demand_df = supply_demand_index.transpose().reset_index()
     new_t_supply_demand_df = t_supply_demand_df.iloc[67:, [0, 10, 11, 12, 14, 15]]
@@ -672,7 +674,7 @@ def get_supply_demand_index():
 
 
 def get_house_occupancy_df():
-    ho_df = pd.read_csv('/Users/jiyongkim/Downloads/house_occupancy.csv', encoding='UTF8')
+    ho_df = pd.read_csv(needed_file_path + 'house_occupancy.csv', encoding='UTF8')
     ho_df = ho_df.iloc[:, 0:6]
     region_lst = ho_df['지역'].unique().tolist()
     all_region_lst_data_lst = []
@@ -690,7 +692,7 @@ def get_house_occupancy_df():
 
 
 def get_house_unsold_df():
-    house_unsold2022 = pd.read_excel('/Users/jiyongkim/Downloads/house_unsold_2022.xlsx',
+    house_unsold2022 = pd.read_excel(needed_file_path + 'house_unsold_2022.xlsx',
                                      sheet_name=2, header=2)
     region_lst = house_unsold2022.loc[1:25, '시.군.구'].tolist()
     lst = list(range(52, 109))

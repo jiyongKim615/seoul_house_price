@@ -225,10 +225,11 @@ def run_catboost_optuna(X_df, y_df, X_test, y_test):
         train_x, test_x, train_y, test_y = train_test_split(X, y, test_size=0.2, random_state=42)
         param = {
             'loss_function': 'RMSE',
+            "task_type": "GPU",
             'l2_leaf_reg': trial.suggest_loguniform('l2_leaf_reg', 1e-3, 10.0),
             'max_bin': trial.suggest_int('max_bin', 200, 400),
             # 'rsm': trial.suggest_uniform('rsm', 0.3, 1.0),
-            'subsample': trial.suggest_uniform('bagging_fraction', 0.4, 1.0),
+        #    'subsample': trial.suggest_uniform('bagging_fraction', 0.4, 1.0),
             'learning_rate': trial.suggest_uniform('learning_rate', 0.006, 0.018),
             'n_estimators': trial.suggest_int('n_estimators', 500, 3000),
             'max_depth': trial.suggest_categorical('max_depth', [5, 7, 9, 11, 13, 15]),
@@ -284,4 +285,4 @@ def run_catboost_optuna(X_df, y_df, X_test, y_test):
     exp_y_test = np.expm1(y_test)
     rmse_non = mean_squared_error(y_test, preds, squared=False)
     rmse_exp = mean_squared_error(exp_y_test, exp_y_pred, squared=False)
-    return X_test, y_test, preds, rmse_non, rmse_exp
+    return X_test, y_test, preds, rmse_non, rmse_exp, cat_params
